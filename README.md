@@ -1,90 +1,119 @@
-# 秦楚 IoT 智能定位监控系统
+# 秦楚定位器模块 (cw_dinweiqi)
 
-> **QinChu IoT** -- 基于 STM32 + NB-IoT + W5500 以太网 + Node.js 的智能定位监控平台
+> **QinChu Locator** -- 基于 STM32F103C8T6 + MN316 NB-IoT 的智能定位器
 
 ---
 
-## 系统架构
+## 模块概述
+
+定位器是秦楚 IoT 系统的核心终端设备，负责 GPS 定位信息采集、运动计步检测，并通过 NB-IoT 网络将数据实时上报至云端监控平台。
+
+## 硬件架构
 
 ```
-+-----------------+     NB-IoT (TCP)     +------------------+
-|   cw_dinweiqi   | --------------------->|                  |
-|  STM32F103C8T6  |                       |   cw_web         |
-|  GPS + ADXL345  |                       |   Node.js 服务器  |
-|  MN316 NB-IoT   |                       |   Web 监控平台    |
-+-----------------+                       |                  |
-                                          |  TCP:8080 接收   |
-+-----------------+     Ethernet (TCP)    |  WS:8081 推送    |
-|    cw_wg        | --------------------->|  HTTP:3000 展示  |
-|  STM32F103ZET6  |                       |                  |
-|  W5500 以太网    |                       +------------------+
-|  多传感器采集    |
-+-----------------+
++-------------------------------------------+
+|              STM32F103C8T6 主控            |
+|                                           |
+|  USART1 <---> MN316 NB-IoT (AT 命令通信) |
+|  USART2 <---> GPS 模块 (NMEA 数据接收)   |
+|  I2C1   <---> ADXL345 三轴加速度计        |
+|  GPIO   <---> LED 状态指示 / 按键         |
+|                                           |
+|  PA13/PA14 -- SWD 调试接口                |
++-------------------------------------------+
+         |                    |
+         v                    v
+   +----------+        +----------+
+   | MN316    |        | ADXL345  |
+   | NB-IoT   |        | 加速度计  |
+   +----------+        +----------+
+         |
+         v TCP
+   +----------+
+   | 云服务器  |
+   | :8080    |
+   +----------+
 ```
 
-## 项目组成
+## 功能特性
 
-| 模块 | 分支 | 说明 | 核心芯片 |
-|------|------|------|----------|
-| **cw_dinweiqi** (定位器) | `locator` | GPS 定位 + 计步 + NB-IoT 上报 | STM32F103C8T6 |
-| **cw_wg** (网关) | `gateway` | 以太网数据转发 + 多传感器 | STM32F103ZET6 + W5500 |
-| **cw_web** (监控平台) | `web` | 实时地图 + 数据展示 + 设备管理 | Node.js + Leaflet |
+- GPS 定位 -- 实时接收 NMEA 0183 格式定位数据
+- 智能计步 -- ADXL345 加速度计实现运动计步
+- NB-IoT 上报 -- MN316 模块 TCP 方式无线数据传输
+- 断线重连 -- 自动检测连接状态并重连
+- 低功耗 -- 支持休眠模式延长续航
 
-## 分支说明
+## 软件架构
 
-- **`main`** -- 项目总览与系统架构
-- **`locator`** -- 定位器模块文档 (cw_dinweiqi)
-- **`gateway`** -- 网关模块文档 (cw_wg)
-- **`web`** -- 监控平台文档 (cw_web)
+### 文件结构
 
-## 快速开始
-
-### 1. 定位器端 (cw_dinweiqi)
-
-使用 STM32CubeMX 打开 `cw_dinweiqi.ioc`，配置后编译烧录。
-
-```bash
-cd cw_dinweiqi/MDK-ARM
-# 使用 Keil MDK 编译
+```
+cw_dinweiqi/
++-- APP/                    # 应用层
+|   +-- fun.c              # 主业务逻辑 (GPS/计步/上报)
+|   +-- tcp_send.c         # TCP 发送任务
+|   +-- headfile.h         # 头文件汇总
++-- BSP/                    # 板级支持包
+|   +-- MN316/             # NB-IoT 模块驱动
+|   +-- GPS/               # GPS 解析驱动
+|   +-- ADXL345/           # 加速度计驱动
++-- Core/                   # STM32 HAL 核心
++-- Drivers/                # HAL 驱动库
++-- MDK-ARM/               # Keil 工程文件
++-- cw_dinweiqi.ioc        # STM32CubeMX 配置
 ```
 
-### 2. 网关端 (cw_wg)
+### 核心代码 (fun.c)
 
-```bash
-cd cw_wg/MDK-ARM
-# 使用 Keil MDK 编译
+```c
+void main_pros(void)
+{
+    adxl345_pros();      // 计步检测
+    uart2_pros_gps();    // GPS 数据处理
+    uart1_pros();        // 串口通信
+    TCP_Send_Task();     // TCP 数据上报
+}
 ```
 
-### 3. 监控平台 (cw_web)
+### MN316 NB-IoT 通信
 
-```bash
-cd cw_web
-npm install
-node server.js
-# 访问 http://localhost:3002
+```c
+// 1. 创建 Socket
+MN316_SendCmd("AT+NSOCR=\"STREAM\",6,6008,2");
+// 2. 连接服务器
+MN316_SendCmd("AT+NSOCO=0,8.134.127.141,8080");
+// 3. 发送数据
+MN316_SendCmd("AT+NSOSD=0,length,data");
 ```
 
-## 硬件清单
+### 数据格式
 
-| 组件 | 型号 | 用途 |
-|------|------|------|
-| 主控芯片 (定位器) | STM32F103C8T6 | 定位器主控 |
-| 主控芯片 (网关) | STM32F103ZET6 | 网关主控 |
-| NB-IoT 模块 | MN316 | 无线数据上报 |
-| 以太网模块 | W5500 | 有线网络接入 |
-| GPS 模块 | - | 定位信息采集 |
-| 计步传感器 | ADXL345 | 运动计步 |
+```
+$GNGGA,014845.00,2233.1234,N,11357.5678,E,1,08,1.2,45.6,M,0.0,M,,*6A
+STEP:42
+STATUS:Battery=85%,Signal=23,RSSI=-67
+```
 
-## 通信协议
+## STM32CubeMX 配置
 
-定位器通过 NB-IoT 以 TCP 方式向服务器发送数据，网关通过 W5500 以太网接入。
+| 参数 | 值 |
+|------|-----|
+| 芯片 | STM32F103C8T6 |
+| 封装 | LQFP48 |
+| USART1 | MN316 通信 |
+| USART2 | GPS 数据接收 |
+| I2C1 | ADXL345 加速度计 |
 
-数据格式详见各分支文档。
+## 依赖关系
 
-## 作者
+```
+cw_dinweiqi (定位器)
+    |
+    +---> cw_web (监控平台)  <-- TCP:8080
+    |
+    +-- cw_wg (网关)        <-- 独立设备
+```
 
-**zouyuhang** -- [GitHub](https://github.com/zouyuhang233)
+---
 
-## 许可证
-
-MIT License
+**分支**: `locator` | **作者**: zouyuhang | **许可证**: MIT
