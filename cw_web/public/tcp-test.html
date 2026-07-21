@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TCP 调试面板 - PetTracker</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+    <style>
+        .tcp-page {
+            max-width: 100%;
+            margin: 0;
+            padding: 0.75rem 1rem;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .tcp-page-header {
+            margin-bottom: 0.6rem;
+            flex-shrink: 0;
+        }
+        .tcp-page-header h1 {
+            font-family: 'ZCOOL KuaiLe', 'Nunito', sans-serif;
+            font-size: 1.2rem;
+            color: var(--warm-gray);
+        }
+        .tcp-page-header p {
+            font-size: 0.72rem;
+            color: var(--muted);
+            margin-top: 0.1rem;
+        }
+
+        /* 连接说明 */
+        .conn-guide {
+            background: var(--warm-white);
+            border-radius: var(--radius-sm);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid rgba(140, 184, 160, 0.1);
+            padding: 0.5rem 0.75rem;
+            margin-bottom: 0.6rem;
+            flex-shrink: 0;
+        }
+        .conn-guide-title {
+            font-family: 'ZCOOL KuaiLe', 'Nunito', sans-serif;
+            font-size: 0.82rem;
+            color: var(--warm-gray);
+            margin-bottom: 0.4rem;
+        }
+        .conn-guide-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem 1rem;
+        }
+        .conn-guide-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.72rem;
+            color: var(--warm-gray);
+        }
+        .conn-guide-item .label {
+            color: var(--muted);
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+        .conn-guide-item .value {
+            font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+            font-weight: 700;
+            color: var(--sage-dark);
+            background: var(--cream);
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+        }
+        .conn-guide-code {
+            display: none;
+        }
+
+        /* 端口信息 */
+        .port-grid {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.6rem;
+            flex-shrink: 0;
+        }
+        .port-card {
+            background: var(--warm-white);
+            border-radius: var(--radius-sm);
+            padding: 0.4rem 0.7rem;
+            border: 1px solid rgba(140, 184, 160, 0.1);
+            text-align: center;
+            flex: 1;
+        }
+        .port-card .port-label {
+            font-size: 0.6rem;
+            color: var(--muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .port-card .port-number {
+            font-size: 1rem;
+            font-weight: 800;
+            color: var(--sage-dark);
+            font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+            margin: 0.1rem 0;
+        }
+        .port-card .port-desc {
+            font-size: 0.6rem;
+            color: var(--muted);
+        }
+
+        /* 客户端 + 消息 两栏 */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 0.6rem;
+            flex: 1;
+            min-height: 0;
+        }
+
+        /* 客户端列表 */
+        .client-panel {
+            background: var(--warm-white);
+            border-radius: var(--radius-sm);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid rgba(140, 184, 160, 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        .client-panel-header {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.4rem 0.6rem;
+            border-bottom: 1px solid rgba(140, 184, 160, 0.08);
+            background: var(--cream);
+            flex-shrink: 0;
+        }
+        .client-panel-icon {
+            font-size: 0.9rem;
+        }
+        .client-panel-title {
+            font-family: 'ZCOOL KuaiLe', 'Nunito', sans-serif;
+            font-size: 0.82rem;
+            color: var(--warm-gray);
+            flex: 1;
+        }
+        .client-panel-body {
+            padding: 0.4rem;
+            overflow-y: auto;
+            flex: 1;
+            min-height: 0;
+        }
+        .client-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.4rem 0.5rem;
+            background: var(--cream);
+            border-radius: 6px;
+            margin-bottom: 0.35rem;
+            border: 1px solid rgba(140, 184, 160, 0.08);
+            cursor: pointer;
+            transition: var(--transition-fast);
+        }
+        .client-item:hover, .client-item.active {
+            border-color: var(--sage);
+            background: rgba(140, 184, 160, 0.06);
+        }
+        .client-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #6A9E84;
+            flex-shrink: 0;
+        }
+        .client-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .client-addr {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--warm-gray);
+            font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+        }
+        .client-meta {
+            font-size: 0.62rem;
+            color: var(--muted);
+            margin-top: 0.05rem;
+        }
+        .client-stats {
+            display: flex;
+            gap: 0.35rem;
+            font-size: 0.62rem;
+            color: var(--muted);
+            flex-shrink: 0;
+        }
+
+        /* 消息面板 */
+        .msg-panel {
+            background: var(--warm-white);
+            border-radius: var(--radius-sm);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid rgba(140, 184, 160, 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        .msg-panel-header {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.4rem 0.6rem;
+            border-bottom: 1px solid rgba(140, 184, 160, 0.08);
+            background: var(--cream);
+            flex-shrink: 0;
+        }
+        .msg-panel-icon {
+            font-size: 0.9rem;
+        }
+        .msg-panel-title {
+            font-family: 'ZCOOL KuaiLe', 'Nunito', sans-serif;
+            font-size: 0.82rem;
+            color: var(--warm-gray);
+            flex: 1;
+        }
+        .msg-panel-badge {
+            font-size: 0.68rem;
+            color: var(--muted);
+            font-weight: 600;
+        }
+        .msg-panel-body {
+            padding: 0.4rem;
+            overflow-y: auto;
+            flex: 1;
+            min-height: 0;
+            font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+            font-size: 0.72rem;
+            background: #2A2520;
+            color: #C4B8B0;
+        }
+        .msg-client-group {
+            margin-bottom: 0.5rem;
+        }
+        .msg-client-header {
+            font-size: 0.68rem;
+            font-weight: 700;
+            color: #6B5E58;
+            padding: 0.2rem 0.4rem;
+            background: rgba(255,255,255,0.04);
+            border-radius: 4px;
+            margin-bottom: 0.2rem;
+            display: flex;
+            justify-content: space-between;
+        }
+        .msg-entry {
+            padding: 0.2rem 0.4rem;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            display: flex;
+            gap: 0.4rem;
+            align-items: flex-start;
+        }
+        .msg-time {
+            color: #6B5E58;
+            white-space: nowrap;
+            flex-shrink: 0;
+            font-size: 0.64rem;
+        }
+        .msg-text { word-break: break-all; }
+        .msg-text.gps { color: #8CB8A0; }
+        .msg-text.step { color: #7EB8C4; }
+        .msg-text.status { color: #C49A3C; }
+        .msg-text.error { color: #E8A598; }
+        .msg-text.tcp-event { color: #A8D4DC; }
+        .msg-text.json { color: #B8A8D4; }
+
+        .log-empty {
+            text-align: center;
+            padding: 0.8rem;
+            color: #6B5E58;
+            font-style: italic;
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.78rem;
+        }
+
+        /* 底部版权 */
+        .tcp-footer {
+            flex-shrink: 0;
+            text-align: center;
+            padding: 0.6rem 1rem;
+            font-size: 0.72rem;
+            color: #8C7B74;
+            border-top: 1px solid rgba(140, 184, 160, 0.08);
+        }
+
+        @media (max-width: 900px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/cw_dwq/" class="nav-logo">
+                <span class="paw-icon">🐾</span>
+                <span class="logo-text">宠爱有家</span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="/cw_dwq/">实时追踪</a></li>
+                <li><a href="/cw_dwq/tcp-test.html">TCP 调试</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="tcp-page">
+        <div class="tcp-page-header">
+            <h1>🔌 TCP 调试面板</h1>
+            <p>服务端信息 · 客户端连接 · 实时消息流 · 手动发送测试</p>
+        </div>
+
+        <!-- 连接说明 -->
+        <div class="conn-guide">
+            <div class="conn-guide-title">📡 客户端连接方式</div>
+            <div class="conn-guide-grid">
+                <div class="conn-guide-item">
+                    <span class="label">服务器地址:</span>
+                    <span class="value" id="guideAddr">8.134.127.141</span>
+                </div>
+                <div class="conn-guide-item">
+                    <span class="label">TCP 端口:</span>
+                    <span class="value">8080</span>
+                </div>
+                <div class="conn-guide-item">
+                    <span class="label">协议:</span>
+                    <span class="value">TCP</span>
+                </div>
+                <div class="conn-guide-item">
+                    <span class="label">数据格式:</span>
+                    <span class="value">JSON / NMEA</span>
+                </div>
+            </div>
+            <div class="conn-guide-code">
+                <span class="comment"># TCP 连接测试 (telnet)</span><br>
+                <span class="cmd">telnet</span> <span class="str">8.134.127.141</span> <span class="str">8080</span><br><br>
+                <span class="comment"># 发送测试数据</span><br>
+                <span class="cmd">echo</span> <span class="str">{type:status,signal:67,rssi:-65,steps:0,battery:80,deviceName:PetTracker-001}</span> <span class="cmd">|</span> <span class="cmd">nc</span> <span class="str">8.134.127.141</span> <span class="str">8080</span><br><br>
+                <span class="comment"># Python 测试脚本</span><br>
+                <span class="cmd">import</span> socket<br>
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)<br>
+                s.connect((<span class="str">'8.134.127.141'</span>, <span class="str">8080</span>))<br>
+                s.send(<span class="str">'{type:status,signal:67,rssi:-65,steps:0,battery:80,deviceName:PetTracker-001}\r\n'</span>.encode())<br>
+                data = s.recv(1024)<br>
+                print(data.decode())<br>
+                s.close()
+            </div>
+        </div>
+
+        <!-- 端口信息 -->
+        <div class="port-grid">
+            <div class="port-card">
+                <div class="port-label">TCP 服务</div>
+                <div class="port-number">8080</div>
+                <div class="port-desc">设备数据接入</div>
+            </div>
+            <div class="port-card">
+                <div class="port-label">Web 服务</div>
+                <div class="port-number">3002</div>
+                <div class="port-desc">HTTP 网页服务</div>
+            </div>
+            <div class="port-card">
+                <div class="port-label">WebSocket</div>
+                <div class="port-number">8081</div>
+                <div class="port-desc">实时数据推送</div>
+            </div>
+            <div class="port-card">
+                <div class="port-label">公网域名</div>
+                <div class="port-number" style="font-size:0.85rem;">zouyuhang.online</div>
+                <div class="port-desc">HTTPS 访问</div>
+            </div>
+        </div>
+
+        <!-- 客户端 + 消息 -->
+        <div class="main-grid">
+            <!-- 客户端列表 -->
+            <div class="client-panel">
+                <div class="client-panel-header">
+                    <span class="client-panel-icon">👥</span>
+                    <h3 class="client-panel-title">客户端连接</h3>
+                    <span class="dash-badge" id="clientCountBadge">0 个连接</span>
+                </div>
+                <div class="client-panel-body" id="clientList">
+                    <div class="log-empty">等待客户端连接...</div>
+                </div>
+            </div>
+
+            <!-- 消息流（按客户端分组） -->
+            <div class="msg-panel">
+                <div class="msg-panel-header">
+                    <span class="msg-panel-icon">📨</span>
+                    <h3 class="msg-panel-title" id="msgPanelTitle">客户端消息流</h3>
+                    <span class="msg-panel-badge" id="msgCountLabel">0 条消息</span>
+                </div>
+                <div class="msg-panel-body" id="msgStream">
+                    <div class="log-empty">选择一个客户端查看消息，或等待新连接...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部版权 -->
+        <div class="tcp-footer">
+            <p>&copy; 2026 邹宇航 &middot; ECUT &middot; 赣ICP备2026009740号 &middot; 赣公网安备36032302000096号</p>
+        </div>
+    </div>
+
+    <script>
+        const BASE_PATH = '/cw_dwq';
+        let serverStartTime = null;
+        let pollInterval = null;
+        let selectedClientId = null;
+        let allMessages = [];  // { id, clientId, clientAddr, time, text, type }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            fetch(BASE_PATH + '/api/health')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.uptime) {
+                        serverStartTime = Date.now() - (data.uptime * 1000);
+                    }
+                    updateAll();
+                    pollInterval = setInterval(updateAll, 2000);
+                })
+                .catch(err => console.error('获取服务端状态失败:', err));
+        });
+
+        function updateAll() {
+            fetch(BASE_PATH + '/api/tcp-debug')
+                .then(res => res.json())
+                .then(data => {
+                    renderServerInfo(data);
+                    renderClients(data.clients || []);
+                    renderMessageStream(data.clients || [], data.messages || []);
+                })
+                .catch(err => console.error('获取 TCP 调试数据失败:', err));
+        }
+
+        function renderServerInfo(data) {
+            // 服务端状态
+            const statusEl = document.getElementById('serverStatus');
+            const statusBadge = document.getElementById('serverStatusBadge');
+            if (statusEl) {
+                statusEl.textContent = data.connected ? '在线' : '离线';
+                statusEl.className = 'tcp-info-value ' + (data.connected ? 'online' : 'offline');
+            }
+            if (statusBadge) {
+                statusBadge.textContent = data.connected ? '在线' : '离线';
+                statusBadge.className = 'dash-badge ' + (data.connected ? 'valid' : '');
+            }
+
+            // 运行时间
+            const uptimeEl = document.getElementById('serverUptime');
+            if (uptimeEl && serverStartTime) {
+                const uptime = Date.now() - serverStartTime;
+                const h = Math.floor(uptime / 3600000);
+                const m = Math.floor((uptime % 3600000) / 60000);
+                const s = Math.floor((uptime % 60000) / 1000);
+                const pad = (n) => n.toString().padStart(2, '0');
+                uptimeEl.textContent = `${pad(h)}:${pad(m)}:${pad(s)}`;
+            }
+        }
+
+        function renderClients(clients) {
+            const container = document.getElementById('clientList');
+            const badge = document.getElementById('clientCountBadge');
+            badge.textContent = `${clients.length} 个连接`;
+
+            if (clients.length === 0) {
+                container.innerHTML = '<div class="log-empty">等待客户端连接...</div>';
+                return;
+            }
+
+            container.innerHTML = clients.map(client => {
+                const connectTime = client.connectTime ? new Date(client.connectTime).toLocaleTimeString() : '--';
+                const rx = formatBytes(client.bytesReceived || 0);
+                const tx = formatBytes(client.bytesSent || 0);
+                const isActive = selectedClientId === client.addr ? 'active' : '';
+                return `
+                    <div class="client-item ${isActive}" onclick="selectClient('${client.addr}')">
+                        <div class="client-dot"></div>
+                        <div class="client-info">
+                            <div class="client-addr">${client.addr}</div>
+                            <div class="client-meta">连接: ${connectTime} · 设备: ${client.deviceName || '--'}</div>
+                        </div>
+                        <div class="client-stats">
+                            <span>↓${rx}</span>
+                            <span>↑${tx}</span>
+                            <span>${client.msgCount || 0}条</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function selectClient(clientAddr) {
+            selectedClientId = clientAddr;
+            document.getElementById('msgPanelTitle').textContent = `📨 ${clientAddr} 的消息流`;
+            renderClientsFromState();
+            renderMessageStreamFromState();
+        }
+
+        function renderMessageStream(clients, messages) {
+            allMessages = messages.map((msg, i) => ({
+                id: i,
+                clientId: msg.clientId || 'unknown',
+                clientAddr: msg.from || 'unknown',
+                time: msg.time,
+                text: msg.text,
+                type: msg.type
+            }));
+
+            if (!selectedClientId && clients.length > 0) {
+                selectedClientId = clients[0].addr;
+            }
+
+            renderMessageStreamFromState();
+        }
+
+        function renderMessageStreamFromState() {
+            const container = document.getElementById('msgStream');
+            const countLabel = document.getElementById('msgCountLabel');
+
+            let filtered = allMessages;
+            if (selectedClientId) {
+                filtered = allMessages.filter(m => m.clientId === selectedClientId);
+            }
+
+            countLabel.textContent = `${filtered.length} 条消息`;
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="log-empty">该客户端暂无消息...</div>';
+                return;
+            }
+
+            // 按客户端分组
+            const groups = {};
+            filtered.forEach(msg => {
+                if (!groups[msg.clientAddr]) {
+                    groups[msg.clientAddr] = [];
+                }
+                groups[msg.clientAddr].push(msg);
+            });
+
+            let html = '';
+            Object.keys(groups).forEach(addr => {
+                const msgs = groups[addr];
+                const firstTime = msgs[0].time ? new Date(msgs[0].time).toLocaleTimeString() : '--:--:--';
+                html += `<div class="msg-client-group">
+                    <div class="msg-client-header">
+                        <span>👤 ${addr}</span>
+                        <span>${msgs.length} 条消息 · 始于 ${firstTime}</span>
+                    </div>`;
+                msgs.forEach(msg => {
+                    const time = msg.time ? new Date(msg.time).toLocaleTimeString() : '--:--:--';
+                    html += `<div class="msg-entry">
+                        <span class="msg-time">${time}</span>
+                        <span class="msg-text ${msg.type}">${escapeHtml(msg.text)}</span>
+                    </div>`;
+                });
+                html += '</div>';
+            });
+
+            container.innerHTML = html;
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function renderClientsFromState() {
+            // Just re-trigger the fetch to refresh client list with active state
+            fetch(BASE_PATH + '/api/tcp-debug')
+                .then(res => res.json())
+                .then(data => renderClients(data.clients || []));
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + sizes[i];
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
