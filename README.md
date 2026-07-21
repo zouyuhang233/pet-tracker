@@ -1,90 +1,132 @@
-# 秦楚 IoT 智能定位监控系统
+# 秦楚网关模块 (cw_wg)
 
-> **QinChu IoT** -- 基于 STM32 + NB-IoT + W5500 以太网 + Node.js 的智能定位监控平台
+> **QinChu Gateway** -- 基于 STM32F103ZET6 + W5500 的智能数据网关
 
 ---
 
-## 系统架构
+## 模块概述
+
+网关是秦楚 IoT 系统的边缘计算节点，负责汇聚多个传感器数据，通过 W5500 以太网模块接入网络，将处理后的数据转发至云端监控平台。
+
+## 硬件架构
 
 ```
-+-----------------+     NB-IoT (TCP)     +------------------+
-|   cw_dinweiqi   | --------------------->|                  |
-|  STM32F103C8T6  |                       |   cw_web         |
-|  GPS + ADXL345  |                       |   Node.js 服务器  |
-|  MN316 NB-IoT   |                       |   Web 监控平台    |
-+-----------------+                       |                  |
-                                          |  TCP:8080 接收   |
-+-----------------+     Ethernet (TCP)    |  WS:8081 推送    |
-|    cw_wg        | --------------------->|  HTTP:3000 展示  |
-|  STM32F103ZET6  |                       |                  |
-|  W5500 以太网    |                       +------------------+
-|  多传感器采集    |
-+-----------------+
++-------------------------------------------+
+|              STM32F103ZET6 主控            |
+|                                           |
+|  SPI1  <---> W5500 以太网模块 (网络接入)  |
+|  SPI2  <---> 扩展传感器                    |
+|  USART1 <---> 调试串口 / 数据透传          |
+|  GPIO  <---> W5500 复位控制 (PG6)          |
+|                                           |
+|  PA13/PA14 -- SWD 调试接口                |
+|  PG6       -- W5500 硬件复位              |
++-------------------------------------------+
+         |
+         v Ethernet
++----------+        +----------+
+| W5500    |        | 传感器组  |
+| 以太网   |        | (SPI/UART)|
++----------+        +----------+
+         |
+         v TCP
++----------+
+| 云服务器  |
+| :8080    |
++----------+
 ```
 
-## 项目组成
+## 功能特性
 
-| 模块 | 分支 | 说明 | 核心芯片 |
-|------|------|------|----------|
-| **cw_dinweiqi** (定位器) | `locator` | GPS 定位 + 计步 + NB-IoT 上报 | STM32F103C8T6 |
-| **cw_wg** (网关) | `gateway` | 以太网数据转发 + 多传感器 | STM32F103ZET6 + W5500 |
-| **cw_web** (监控平台) | `web` | 实时地图 + 数据展示 + 设备管理 | Node.js + Leaflet |
+- 以太网接入 -- W5500 硬件 TCP/IP 协议栈
+- 多传感器汇聚 -- SPI/UART 多路传感器数据采集
+- 数据转发 -- 边缘预处理后上报云端
+- 稳定可靠 -- 有线网络，不依赖无线信号
+- 灵活配置 -- IP/MAC/网关可配置
 
-## 分支说明
+## 软件架构
 
-- **`main`** -- 项目总览与系统架构
-- **`locator`** -- 定位器模块文档 (cw_dinweiqi)
-- **`gateway`** -- 网关模块文档 (cw_wg)
-- **`web`** -- 监控平台文档 (cw_web)
+### 文件结构
 
-## 快速开始
-
-### 1. 定位器端 (cw_dinweiqi)
-
-使用 STM32CubeMX 打开 `cw_dinweiqi.ioc`，配置后编译烧录。
-
-```bash
-cd cw_dinweiqi/MDK-ARM
-# 使用 Keil MDK 编译
+```
+cw_wg/
++-- APP/                    # 应用层
+|   +-- int_w5500.c        # W5500 初始化与 TCP 客户端
+|   +-- headfile.h
++-- BSP/                    # 板级支持包
+|   +-- W5500/             # W5500 驱动
++-- Core/                   # STM32 HAL 核心
++-- Drivers/                # HAL 驱动库
++-- MDK-ARM/               # Keil 工程文件
++-- cw_wg.ioc              # STM32CubeMX 配置
 ```
 
-### 2. 网关端 (cw_wg)
+### W5500 网络初始化 (int_w5500.c)
 
-```bash
-cd cw_wg/MDK-ARM
-# 使用 Keil MDK 编译
+```c
+uint8_t ip[4]  = {192, 168, 137, 100};  // 本机 IP
+uint8_t ga[4]  = {192, 168, 137, 1};    // 网关地址
+uint8_t sub[4] = {255, 255, 255, 0};    // 子网掩码
+uint8_t mac[6] = {110, 120, 13, 140, 150, 16};
+
+void Inf_W5500_Init(void)
+{
+    Inf_W5500_Rest();          // 1. 软重启芯片
+    user_wizchip_reg_func();   // 2. 注册回调函数
+    setGAR(ga);                // 3. 设置网关
+    setSUBR(sub);              // 4. 设置子网掩码
+    setSIPR(ip);               // 5. 设置 IP
+    setSHAR(mac);              // 6. 设置 MAC
+}
 ```
 
-### 3. 监控平台 (cw_web)
+### TCP 客户端连接
 
-```bash
-cd cw_web
-npm install
-node server.js
-# 访问 http://localhost:3002
+```c
+#define SN            0
+#define CLIENT_PORT   9090
+uint8_t SERVER_IP[4] = {8, 134, 127, 141};
+#define SERVER_PORT   8080
+
+CommmonStatus Int_W5500_Start_TCP_Client(void)
+{
+    uint8_t sn_sr = getSn_SR(SN);
+    if (sn_sr == SOCK_CLOSED)
+    {
+        socket(SN, Sn_MR_TCP, CLIENT_PORT, 0);
+        connect(SN, SERVER_IP, SERVER_PORT);
+    }
+}
 ```
 
-## 硬件清单
+## 网络配置
 
-| 组件 | 型号 | 用途 |
-|------|------|------|
-| 主控芯片 (定位器) | STM32F103C8T6 | 定位器主控 |
-| 主控芯片 (网关) | STM32F103ZET6 | 网关主控 |
-| NB-IoT 模块 | MN316 | 无线数据上报 |
-| 以太网模块 | W5500 | 有线网络接入 |
-| GPS 模块 | - | 定位信息采集 |
-| 计步传感器 | ADXL345 | 运动计步 |
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| IP 地址 | 192.168.137.100 | 设备 IP |
+| 网关 | 192.168.137.1 | 默认网关 |
+| 子网掩码 | 255.255.255.0 | 子网掩码 |
+| MAC 地址 | 6E:78:0D:8C:96:10 | 物理地址 |
+| 服务器 | 8.134.127.141:8080 | 云平台地址 |
 
-## 通信协议
+## STM32CubeMX 配置
 
-定位器通过 NB-IoT 以 TCP 方式向服务器发送数据，网关通过 W5500 以太网接入。
+| 参数 | 值 |
+|------|-----|
+| 芯片 | STM32F103ZET6 |
+| 封装 | LQFP144 |
+| SPI1 | W5500 以太网通信 |
+| SPI2 | 扩展传感器接口 |
+| USART1 | 调试串口 |
 
-数据格式详见各分支文档。
+## 依赖关系
 
-## 作者
+```
+cw_wg (网关)
+    |
+    +---> cw_web (监控平台)  <-- TCP:8080
+```
 
-**zouyuhang** -- [GitHub](https://github.com/zouyuhang233)
+---
 
-## 许可证
-
-MIT License
+**分支**: `gateway` | **作者**: zouyuhang | **许可证**: MIT
