@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐾 宠爱有家 - 实时追踪监控</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- ===== 导航栏 ===== -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="#" class="nav-logo">
+                <span class="paw-icon">🐾</span>
+                <span class="logo-text">宠爱有家</span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="/cw_dwq/">实时追踪</a></li>
+                <li><a href="/cw_dwq/tcp-test.html">TCP 调试</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- ===== 项目介绍区（左右两栏） ===== -->
+    <section class="hero-section">
+        <div class="hero-container">
+            <!-- 左侧：项目简介 -->
+            <div class="hero-left">
+                <div class="hero-left-inner">
+                    <span class="hero-tag">🐾 宠爱有家</span>
+                    <h1 class="hero-title">
+                        <span class="title-highlight">智能宠物</span>追踪系统
+                    </h1>
+                    <p class="hero-desc">
+                        技术栈：STM32F1、FreeRTOS、W5500、MB-IOT、LORA、AT6558R、ADX345<br>
+                        基于STM32 HAL库开发，蜂窝网络良好时通过NB-IOT模块TCP上报GPS、步数、设备信息；<br>
+                        无网络时通过LORA传输至网关，W5500以太网模块连接服务端，实现双网络备份。<br>
+                        FreeRTOS多任务架构，Event Group事件组同步，Idle任务自动进入STOP低功耗模式（~10µA），<br>
+                        RTC定时唤醒上报，实现低功耗长续航。
+                    </p>
+                    <a href="#dashboard" class="hero-btn">
+                        <span>查看实时追踪</span>
+                        <span class="btn-paw">🐾</span>
+                    </a>
+                </div>
+            </div>
+            <!-- 右侧：视频播放 -->
+            <div class="hero-right">
+                <div class="video-wrapper">
+                    <video class="hero-video" controls autoplay muted loop playsinline>
+                        <source src="demo.mp4" type="video/mp4">
+                        您的浏览器不支持视频播放
+                    </video>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== 实时追踪仪表盘 ===== -->
+    <section id="dashboard" class="dashboard-section">
+        <div class="dashboard-grid">
+            <!-- 左侧面板 -->
+            <div class="dash-left">
+                <!-- 设备选择器 -->
+                <div class="device-selector-wrap">
+                    <label class="device-selector-label">📡 设备选择</label>
+                    <div class="device-selector" id="deviceSelector">
+                        <div class="device-selector-empty">等待设备连接...</div>
+                    </div>
+                </div>
+
+                <!-- 连接状态条 -->
+                <div class="conn-bar" id="connectionBar">
+                    <span class="conn-dot" id="connectionDot"></span>
+                    <span class="conn-text" id="connectionText">等待设备连接...</span>
+                </div>
+
+                <!-- GPS 位置卡片 -->
+                <div class="dash-card gps-card clickable-card" onclick="openGPSModal()">
+                    <div class="dash-card-header">
+                        <div class="dash-card-icon-wrap">
+                            <span class="dash-card-icon">🌍</span>
+                        </div>
+                        <h3 class="dash-card-title">GPS 位置</h3>
+                        <span class="dash-badge" id="gpsStatus">等待定位...</span>
+                    </div>
+                    <div class="dash-card-body">
+                        <div class="dash-data-grid">
+                            <div class="dash-data-item">
+                                <span class="dash-data-label">纬度</span>
+                                <span class="dash-data-value" id="latitude">--</span>
+                            </div>
+                            <div class="dash-data-item">
+                                <span class="dash-data-label">经度</span>
+                                <span class="dash-data-value" id="longitude">--</span>
+                            </div>
+                            <div class="dash-data-item">
+                                <span class="dash-data-label">海拔</span>
+                                <span class="dash-data-value" id="altitude">--</span>
+                            </div>
+                            <div class="dash-data-item">
+                                <span class="dash-data-label">卫星数</span>
+                                <span class="dash-data-value" id="satellites">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 步数统计卡片 -->
+                <div class="dash-card step-card clickable-card" onclick="openStepModal()">
+                    <div class="dash-card-header">
+                        <div class="dash-card-icon-wrap">
+                            <span class="dash-card-icon">🦴</span>
+                        </div>
+                        <h3 class="dash-card-title">今日步数</h3>
+                    </div>
+                    <div class="dash-card-body">
+                        <div class="step-display">
+                            <div class="step-ring">
+                                <svg viewBox="0 0 120 120" class="step-svg">
+                                    <defs>
+                                        <linearGradient id="stepGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                            <stop offset="0%" stop-color="#8CB8A0"/>
+                                            <stop offset="100%" stop-color="#7EB8C4"/>
+                                        </linearGradient>
+                                    </defs>
+                                    <circle class="step-ring-bg" cx="60" cy="60" r="54"/>
+                                    <circle class="step-ring-progress" id="stepRing" cx="60" cy="60" r="54"/>
+                                </svg>
+                                <div class="step-inner">
+                                    <span class="step-count" id="stepCount">0</span>
+                                    <span class="step-unit">步</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="step-footer" id="stepTime">等待运动数据...</div>
+                    </div>
+                </div>
+
+                <!-- 设备状态卡片 -->
+                <div class="dash-card status-card clickable-card" onclick="openStatusModal()">
+                    <div class="dash-card-header">
+                        <div class="dash-card-icon-wrap">
+                            <span class="dash-card-icon">📊</span>
+                        </div>
+                        <h3 class="dash-card-title">设备状态</h3>
+                        <span class="dash-badge device-name-badge" id="deviceName">--</span>
+                    </div>
+                    <div class="dash-card-body">
+                        <div class="dash-data-grid">
+                            <div class="dash-data-item">
+                                <span class="dash-data-label">电池电量</span>
+                                <span class="dash-data-value" id="battery">--</span>
+                            </div>
+                            <div class="dash-data-item">
+                                <span class="dash-data-label">信号强度</span>
+                                <span class="dash-data-value" id="signal">--</span>
+                            </div>
+                            <div class="dash-data-item">
+                                <span class="dash-data-label">RSSI</span>
+                                <span class="dash-data-value" id="rssi">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 数据日志卡片 -->
+                <div class="dash-card log-card clickable-card" onclick="openLogModal()">
+                    <div class="dash-card-header">
+                        <div class="dash-card-icon-wrap">
+                            <span class="dash-card-icon">📋</span>
+                        </div>
+                        <h3 class="dash-card-title">数据日志</h3>
+                        <button class="dash-btn dash-btn-sm dash-btn-ghost" onclick="clearLog()">清空</button>
+                    </div>
+                    <div class="dash-card-body">
+                        <div class="log-container" id="logContainer">
+                            <div class="log-empty">🐾 等待接收数据...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧面板 -->
+            <div class="dash-right">
+                <!-- 地图卡片 -->
+                <div class="dash-card map-card">
+                    <div class="dash-card-header">
+                        <div class="dash-card-icon-wrap">
+                            <span class="dash-card-icon">🗺️</span>
+                        </div>
+                        <h3 class="dash-card-title">实时位置</h3>
+                        <button class="dash-btn dash-btn-sm dash-btn-primary" onclick="centerMap()">
+                            📍 居中定位
+                        </button>
+                    </div>
+                    <div class="dash-card-body map-body">
+                        <div id="map"></div>
+                    </div>
+                </div>
+
+                <!-- 统计卡片 -->
+                <div class="stats-row clickable-card" onclick="openStatsModal()">
+                    <div class="dash-card stat-card">
+                        <div class="stat-icon">🦴</div>
+                        <div class="stat-value" id="statSteps">0</div>
+                        <div class="stat-label">今日步数</div>
+                    </div>
+                    <div class="dash-card stat-card">
+                        <div class="stat-icon">📛</div>
+                        <div class="stat-value" id="statDeviceName">--</div>
+                        <div class="stat-label">设备名称</div>
+                    </div>
+                    <div class="dash-card stat-card">
+                        <div class="stat-icon">🔋</div>
+                        <div class="stat-value" id="statBattery">--</div>
+                        <div class="stat-label">电池电量</div>
+                    </div>
+                </div>
+
+                <!-- ===== TCP 服务监控卡片 ===== -->
+                <div class="dash-card tcp-monitor-card clickable-card" onclick="openTcpModal()">
+                    <div class="dash-card-header">
+                        <div class="dash-card-icon-wrap">
+                            <span class="dash-card-icon">🔌</span>
+                        </div>
+                        <h3 class="dash-card-title">TCP 服务监控</h3>
+                        <span class="dash-badge" id="tcpStatusBadge">离线</span>
+                    </div>
+                    <div class="dash-card-body">
+                        <div class="tcp-grid">
+                            <div class="tcp-item">
+                                <span class="tcp-label">TCP 服务器</span>
+                                <span class="tcp-value" id="tcpServerStatus">未启动</span>
+                            </div>
+                            <div class="tcp-item">
+                                <span class="tcp-label">监听端口</span>
+                                <span class="tcp-value" id="tcpPort">8080</span>
+                            </div>
+                            <div class="tcp-item">
+                                <span class="tcp-label">客户端地址</span>
+                                <span class="tcp-value" id="tcpClientAddr">--</span>
+                            </div>
+                            <div class="tcp-item">
+                                <span class="tcp-label">接收字节</span>
+                                <span class="tcp-value" id="tcpBytesReceived">0</span>
+                            </div>
+                            <div class="tcp-item">
+                                <span class="tcp-label">接收消息数</span>
+                                <span class="tcp-value" id="tcpMsgCount">0</span>
+                            </div>
+                        </div>
+                        <div class="tcp-raw-section">
+                            <div class="tcp-raw-header">
+                                <span>原始 TCP 数据流</span>
+                                <button class="dash-btn dash-btn-sm dash-btn-ghost" onclick="clearTcpRaw()">清空</button>
+                            </div>
+                            <div class="tcp-raw-container" id="tcpRawContainer">
+                                <div class="log-empty">等待 TCP 连接...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== 页脚 ===== -->
+    <footer class="footer">
+        <p>&copy; 2026 邹宇航 &middot; ECUT &middot; 赣ICP备2026009740号 &middot; 赣公网安备36032302000096号</p>
+    </footer>
+
+    <!-- AMap JS API -->
+    <script src="https://webapi.amap.com/maps?v=2.0&key=000f5d6cf954cef7e26829f36ef8f45a"></script>
+    <!-- App JS -->
+    <script src="app.js"></script>
+
+    <!-- ===== 详情弹窗 ===== -->
+    <div class="modal-overlay" id="modalOverlay" onclick="closeModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+            <div class="modal-header" id="modalHeader"></div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+</body>
+</html>
